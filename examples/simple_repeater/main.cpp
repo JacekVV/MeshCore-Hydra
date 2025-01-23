@@ -172,7 +172,7 @@ protected:
       uint32_t timestamp;
       memcpy(&timestamp, data, 4);
 
-      if (memcmp(&data[4], ADMIN_PASSWORD, 8) == 0) {  // check for valid password
+      if (memcmp(&data[4], ADMIN_PASSWORD, strlen(ADMIN_PASSWORD)) == 0) {  // check for valid password
         auto client = putClient(sender);  // add to known clients (if not already known)
         if (client == NULL || timestamp <= client->last_timestamp) {
           MESH_DEBUG_PRINTLN("Client table full, or replay attack!");
