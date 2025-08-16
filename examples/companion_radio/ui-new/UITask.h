@@ -55,7 +55,7 @@ public:
   bool hasDisplay() const { return _display != NULL; }
   bool isButtonPressed() const;
 
-  // from AbsractUITask
+  // from AbstractUITask
   void msgRead(int msgcount) override;
   void newMsg(uint8_t path_len, const char* from_name, const char* text, int msgcount) override;
   void soundBuzzer(UIEventType bet = UIEventType::none) override;
