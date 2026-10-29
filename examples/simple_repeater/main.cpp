@@ -105,6 +105,10 @@ void setup() {
   sensors.begin();
 
   the_mesh.begin(fs);
+#ifdef HYDRA_WIFI_OTA
+  // Hydra: repeater CLI over Wi-Fi (http://<ip>/cli?cmd=...), run from board.loop() in this task
+  board.setCliHandler([](char* cmd, char* reply) { the_mesh.handleCommand(0, cmd, reply); });
+#endif
 
 #ifdef DISPLAY_CLASS
   ui_task.begin(the_mesh.getNodePrefs(), FIRMWARE_BUILD_DATE, FIRMWARE_VERSION);
