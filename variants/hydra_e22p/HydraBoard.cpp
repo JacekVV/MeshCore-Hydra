@@ -89,9 +89,21 @@ static char hostname[24];
 static bool ntp_started = false;
 
 // Wi-Fi watchdog: the ESP32 may stop retrying after many failed attempts, so reconnect by hand
+// With WIFI_SSID2 (fallback network) every retry switches to the other network.
 #define WIFI_RETRY_MILLIS 60000
 static unsigned long wifi_lost_at = 0;
 static uint32_t wifi_reconnects = 0;
+static const char* const wifi_ssids[] = { WIFI_SSID,
+#ifdef WIFI_SSID2
+  WIFI_SSID2
+#endif
+};
+static const char* const wifi_pwds[] = { WIFI_PWD,
+#ifdef WIFI_SSID2
+  WIFI_PWD2
+#endif
+};
+static int wifi_net = 0;
 
 // CLI over HTTP: the web server task hands the command to the main loop and waits for the reply
 #define CLI_WAIT_MILLIS 3000
@@ -144,8 +156,8 @@ static void handleStats(AsyncWebServerRequest *request) {
             FIRMWARE_VERSION, (unsigned long)(millis() / 1000), (unsigned long)reason, board.getResetReasonString(reason));
   r->printf("\"free_heap\":%lu,\"min_free_heap\":%lu,\"max_alloc_heap\":%lu,",
             (unsigned long)ESP.getFreeHeap(), (unsigned long)ESP.getMinFreeHeap(), (unsigned long)ESP.getMaxAllocHeap());
-  r->printf("\"wifi_rssi\":%d,\"wifi_reconnects\":%lu,\"mcu_temp\":%.1f,",
-            WiFi.RSSI(), (unsigned long)wifi_reconnects, board.getMCUTemperature());
+  r->printf("\"wifi_ssid\":\"%s\",\"wifi_rssi\":%d,\"wifi_reconnects\":%lu,\"mcu_temp\":%.1f,",
+            wifi_ssids[wifi_net], WiFi.RSSI(), (unsigned long)wifi_reconnects, board.getMCUTemperature());
   r->printf("\"radio\":{\"recv\":%lu,\"sent\":%lu,\"recv_errors\":%lu,\"noise_floor\":%d,\"last_rssi\":%.1f,\"last_snr\":%.2f}}",
             (unsigned long)radio_driver.getPacketsRecv(), (unsigned long)radio_driver.getPacketsSent(),
             (unsigned long)radio_driver.getPacketsRecvErrors(), radio_driver.getNoiseFloor(),
@@ -170,7 +182,7 @@ void HydraBoard::onBootComplete() {
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(hostname);
   WiFi.setAutoReconnect(true);
-  WiFi.begin(WIFI_SSID, WIFI_PWD);
+  WiFi.begin(wifi_ssids[wifi_net], wifi_pwds[wifi_net]);
 }
 
 void HydraBoard::loop() {
@@ -187,8 +199,9 @@ void HydraBoard::loop() {
   } else if (wifi_lost_at == 0) {
     wifi_lost_at = millis();
   } else if (millis() - wifi_lost_at > WIFI_RETRY_MILLIS) {
+    wifi_net = (wifi_net + 1) % (sizeof(wifi_ssids) / sizeof(wifi_ssids[0]));
     WiFi.disconnect();
-    WiFi.begin(WIFI_SSID, WIFI_PWD);
+    WiFi.begin(wifi_ssids[wifi_net], wifi_pwds[wifi_net]);
     wifi_reconnects++;
     wifi_lost_at = millis();
   }
@@ -245,7 +258,7 @@ bool HydraBoard::startOTAUpdate(const char* id, char reply[]) {
     int status = WiFi.status();
     int found = WiFi.scanNetworks(), rssi = 0, channel = 0;
     for (int i = 0; i < found; i++) {
-      if (WiFi.SSID(i) == WIFI_SSID) { rssi = WiFi.RSSI(i); channel = WiFi.channel(i); break; }
+      if (WiFi.SSID(i) == wifi_ssids[wifi_net]) { rssi = WiFi.RSSI(i); channel = WiFi.channel(i); break; }
     }
     WiFi.scanDelete();
     if (rssi != 0) {
@@ -255,7 +268,7 @@ bool HydraBoard::startOTAUpdate(const char* id, char reply[]) {
     }
     return true;
   }
-  sprintf(reply, "OTA: http://%s/update", WiFi.localIP().toString().c_str());
+  sprintf(reply, "OTA: http://%s/update (%s)", WiFi.localIP().toString().c_str(), wifi_ssids[wifi_net]);
   return true;
 }
 
