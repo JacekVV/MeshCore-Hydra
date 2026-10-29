@@ -1,6 +1,10 @@
 #include "MyMesh.h"
 #include <algorithm>
 
+#ifdef HYDRA_NODE_LIST
+  #include <HydraNodes.h>   // Hydra: node list from adverts
+#endif
+
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef LORA_FREQ
@@ -650,6 +654,9 @@ static bool isShare(const mesh::Packet *packet) {
 void MyMesh::onAdvertRecv(mesh::Packet *packet, const mesh::Identity &id, uint32_t timestamp,
                           const uint8_t *app_data, size_t app_data_len) {
   mesh::Mesh::onAdvertRecv(packet, id, timestamp, app_data, app_data_len); // chain to super impl
+#ifdef HYDRA_NODE_LIST
+  hydraNodeHeard(packet, id, timestamp, app_data, app_data_len);
+#endif
 
   // if this a zero hop advert (and not via 'Share'), add it to neighbours
   if (packet->getPathHashCount() == 0 && !isShare(packet)) {
