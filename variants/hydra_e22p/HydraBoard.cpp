@@ -59,9 +59,18 @@ function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;
 function tab(){return decodeURIComponent(location.hash.slice(1))}
 function show(){if(!data)return;const cur=tab();
  let t='<a href="#" class="'+(cur==''?'on':'')+'">Wszystkie ('+data.messages.length+')</a>';
- for(const c of data.channels){const n=data.messages.filter(m=>m.channel==c).length;
-  t+='<a href="#'+encodeURIComponent(c)+'" class="'+(cur==c?'on':'')+'">'+esc(c)+' ('+n+')</a>'}
+ data.channels.forEach((c,i)=>{const n=data.messages.filter(m=>m.channel==c).length;
+  if(i<2||n>0||cur==c)t+='<a href="#'+encodeURIComponent(c)+'" class="'+(cur==c?'on':'')+'">'+esc(c)+' ('+n+')</a>'});
+ t+='<a href="#stat" class="'+(cur=='stat'?'on':'')+'">Statystyka</a>';
  document.getElementById('tabs').innerHTML=t;
+ if(cur=='stat'){let tot=0,dec=0;data.hash_stats.sort((a,b)=>b.packets-a.packets);
+  let h='<tr><th>ID kanału</th><th>Kanał</th><th>Wiadomości</th><th>Odszyfrowane</th></tr>';
+  for(const s of data.hash_stats){tot+=s.packets;dec+=s.decrypted;
+   h+='<tr><td>'+s.hash+'</td><td>'+(s.channel?esc(s.channel):'nieznany (prywatny lub inna nazwa)')+'</td><td>'+s.packets+'</td><td>'+s.decrypted+'</td></tr>'}
+  document.getElementById('t').innerHTML=h;
+  document.getElementById('s').textContent='Wiadomości kanałowe od startu: '+tot+', odszyfrowane: '+dec+', sprawdzane kanały: '+data.channels.length+
+   ' (Public i nazwy z listy), czas pracy: '+ago(data.uptime_s);
+  return}
  let h='<tr><th>Odebrano</th><th>Nadano</th>'+(cur==''?'<th>Kanał</th>':'')+'<th>Wiadomość</th><th>Skoki</th><th>SNR</th><th>RSSI</th></tr>';
  for(const m of data.messages){if(cur!=''&&m.channel!=cur)continue;
   h+='<tr><td>'+ago(m.heard_s)+' temu</td><td>'+new Date(m.sent_time*1000).toLocaleString('pl-PL')+'</td>'+(cur==''?'<td>'+esc(m.channel)+'</td>':'')+
