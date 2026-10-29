@@ -4,6 +4,9 @@
 #include <Mesh.h>
 #include <RTClib.h>
 #include <target.h>
+#ifdef HYDRA_CHANNELS
+  #include <HydraChannels.h>
+#endif
 
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
   #include <InternalFileSystem.h>
@@ -172,6 +175,16 @@ protected:
   void onPeerDataRecv(mesh::Packet* packet, uint8_t type, int sender_idx, const uint8_t* secret, uint8_t* data, size_t len) override;
   bool onPeerPathRecv(mesh::Packet* packet, int sender_idx, const uint8_t* secret, uint8_t* path, uint8_t path_len, uint8_t extra_type, uint8_t* extra, uint8_t extra_len) override;
   void onControlDataRecv(mesh::Packet* packet) override;
+
+#ifdef HYDRA_CHANNELS
+  // Hydra: decrypt Public and hashtag channels for the read-only view at http://<ip>/kanal (forwarding unchanged)
+  int searchChannelsByHash(const uint8_t* hash, mesh::GroupChannel channels[], int max_matches) override {
+    return hydraSearchChannels(hash, channels, max_matches);
+  }
+  void onGroupDataRecv(mesh::Packet* packet, uint8_t type, const mesh::GroupChannel& channel, uint8_t* data, size_t len) override {
+    hydraGroupMsg(packet, type, channel, data, len);
+  }
+#endif
 
   void sendFloodReply(mesh::Packet* packet, unsigned long delay_millis, uint8_t path_hash_size);
 

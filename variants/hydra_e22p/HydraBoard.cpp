@@ -22,7 +22,7 @@ static const char NODES_PAGE[] = R"HTML(<!doctype html><html><head><meta charset
 <style>body{font-family:sans-serif;margin:12px}table{border-collapse:collapse;font-size:14px}
 td,th{border:1px solid #bbb;padding:3px 6px;text-align:left}th{background:#eee}.d{color:#070;font-weight:bold}</style>
 </head><body><h3>Węzły słyszane przez repeater</h3><p id="s"></p><table id="t"></table>
-<p>Skoki 0 = słyszany bezpośrednio. Dla skoków &gt; 0 SNR i RSSI dotyczą ostatniego repeatera (kolumna „przez”).</p>
+<p>Skoki 0 = słyszany bezpośrednio. Dla skoków &gt; 0 SNR i RSSI dotyczą ostatniego repeatera (kolumna „przez”). <a href="/kanal">Kanały</a></p>
 <script>
 function ago(s){return s<60?s+' s':s<3600?Math.floor(s/60)+' min':s<86400?Math.floor(s/3600)+' h':Math.floor(s/86400)+' d'}
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -39,8 +39,35 @@ load();setInterval(load,30000);
 </script></body></html>)HTML";
 #endif
 
+#ifdef HYDRA_CHANNELS
+#include "HydraChannels.h"
+
+// channel messages page (Polish UI), reads /channels every 15 s
+static const char CHANNELS_PAGE[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Hydra MeshCore kanały</title>
+<style>body{font-family:sans-serif;margin:12px}table{border-collapse:collapse;font-size:14px}
+td,th{border:1px solid #bbb;padding:3px 6px;text-align:left;vertical-align:top}th{background:#eee}td.t{max-width:600px}</style>
+</head><body><h3>Wiadomości na kanałach</h3><p id="s"></p><table id="t"></table>
+<p>Ostatnie wiadomości w pamięci repeatera (znikają po restarcie). Czas nadania z zegara nadawcy. SNR i RSSI dotyczą ostatniego skoku.
+<a href="/">Węzły</a></p>
+<script>
+function ago(s){return s<60?s+' s':s<3600?Math.floor(s/60)+' min':s<86400?Math.floor(s/3600)+' h':Math.floor(s/86400)+' d'}
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function load(){fetch('/channels').then(r=>r.json()).then(j=>{
+ j.messages.sort((a,b)=>b.seq-a.seq);
+ let h='<tr><th>Odebrano</th><th>Nadano</th><th>Kanał</th><th>Wiadomość</th><th>Skoki</th><th>SNR</th><th>RSSI</th></tr>';
+ for(const m of j.messages){h+='<tr><td>'+ago(m.heard_s)+' temu</td><td>'+new Date(m.sent_time*1000).toLocaleString('pl-PL')+'</td><td>'+esc(m.channel)+
+  '</td><td class="t">'+esc(m.text)+'</td><td>'+m.hops+'</td><td>'+m.snr+'</td><td>'+m.rssi+'</td></tr>'}
+ document.getElementById('t').innerHTML=h;
+ document.getElementById('s').textContent='Kanały: '+j.channels.join(', ')+'. Wiadomości: '+j.messages.length+', czas pracy: '+ago(j.uptime_s);
+})}
+load();setInterval(load,15000);
+</script></body></html>)HTML";
+#endif
+
 static AsyncWebServer* ota_server = NULL;
 static char hostname[24];
+static bool ntp_started = false;
 
 // Wi-Fi watchdog: the ESP32 may stop retrying after many failed attempts, so reconnect by hand
 #define WIFI_RETRY_MILLIS 60000
@@ -113,6 +140,9 @@ void HydraBoard::setCliHandler(CliHandler handler) {
 
 void HydraBoard::onBootComplete() {
   inhibit_sleep = true;   // light sleep would drop the Wi-Fi connection
+#ifdef HYDRA_CHANNELS
+  hydraChannelsInit();
+#endif
 
   uint8_t mac[6];
   WiFi.macAddress(mac);
@@ -144,12 +174,29 @@ void HydraBoard::loop() {
     wifi_lost_at = millis();
   }
 
+  // system clock from NTP (the ESP32 clock restarts from a fixed date after each reset, and MeshCore
+  // nodes ignore adverts older than the last one they saw); ESP32RTCClock reads the system clock
+  if (!ntp_started && WiFi.status() == WL_CONNECTED) {
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    ntp_started = true;
+  }
+
   // start the web server once, after the first Wi-Fi connection (it keeps serving after reconnects)
   if (ota_server == NULL && WiFi.status() == WL_CONNECTED) {
     ota_server = new AsyncWebServer(80);
     ota_server->on("/version", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(200, "text/plain", FIRMWARE_VERSION);
     });
+#ifdef HYDRA_CHANNELS
+    ota_server->on("/channels", HTTP_GET, [](AsyncWebServerRequest *request) {
+      AsyncResponseStream* response = request->beginResponseStream("application/json");
+      hydraChannelsJson(*response);
+      request->send(response);
+    });
+    ota_server->on("/kanal", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->send(200, "text/html", CHANNELS_PAGE);
+    });
+#endif
     ota_server->on("/cli", HTTP_ANY, handleCli);
     ota_server->on("/stats", HTTP_GET, handleStats);
     ota_server->on("/log", HTTP_GET, [](AsyncWebServerRequest *request) {
