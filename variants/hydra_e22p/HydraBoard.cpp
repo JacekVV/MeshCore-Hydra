@@ -225,6 +225,11 @@ void HydraBoard::loop() {
       hydraChannelsJson(*response);
       request->send(response);
     });
+    ota_server->on("/grp", HTTP_GET, [](AsyncWebServerRequest *request) {
+      AsyncResponseStream* response = request->beginResponseStream("application/json");
+      hydraRawJson(*response);
+      request->send(response);
+    });
     ota_server->on("/kanal", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(200, "text/html", CHANNELS_PAGE);
     });

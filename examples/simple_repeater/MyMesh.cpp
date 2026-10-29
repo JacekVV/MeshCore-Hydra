@@ -569,6 +569,10 @@ mesh::DispatcherAction MyMesh::onRecvPacket(mesh::Packet* pkt) {
   } else {
     recv_pkt_region = NULL;
   }
+#ifdef HYDRA_CHANNELS
+  uint8_t type = pkt->getPayloadType();
+  if ((type == PAYLOAD_TYPE_GRP_TXT || type == PAYLOAD_TYPE_GRP_DATA) && !getTables()->wasSeen(pkt)) hydraGroupRaw(pkt);
+#endif
   return Mesh::onRecvPacket(pkt);
 }
 

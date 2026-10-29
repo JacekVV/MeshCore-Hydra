@@ -39,6 +39,20 @@ static int8_t hash_channel[256];   // last channel decrypted with this hash, -1 
 static int num_channels = 0;
 static HydraMessage messages[HYDRA_MAX_MESSAGES];
 static uint32_t next_seq = 1;
+
+struct HydraRawPacket {
+  uint8_t type;
+  uint8_t hops;
+  int8_t snr4;
+  int16_t rssi;
+  uint8_t len;
+  uint32_t heard_millis;
+  uint32_t seq;              // 0 = empty slot
+  uint8_t payload[MAX_PACKET_PAYLOAD];
+};
+
+static HydraRawPacket raw_packets[HYDRA_MAX_RAW];
+static uint32_t next_raw_seq = 1;
 static portMUX_TYPE msg_mux = portMUX_INITIALIZER_UNLOCKED;   // web server runs in another task
 
 static void addChannel(const char* name, const uint8_t secret[16]) {
@@ -108,6 +122,44 @@ void hydraGroupMsg(const mesh::Packet* packet, uint8_t type, const mesh::GroupCh
   portEXIT_CRITICAL(&msg_mux);
 }
 
+void hydraGroupRaw(const mesh::Packet* packet) {
+  // called once per new (not duplicate) group packet, before decryption
+  HydraRawPacket p;
+  p.type = packet->getPayloadType();
+  p.hops = packet->getPathHashCount();
+  p.snr4 = (int8_t)(packet->getSNR() * 4);
+  p.rssi = (int16_t)radio_driver.getLastRSSI();
+  p.len = packet->payload_len;
+  p.heard_millis = millis();
+  memcpy(p.payload, packet->payload, p.len);
+
+  portENTER_CRITICAL(&msg_mux);
+  p.seq = next_raw_seq++;
+  raw_packets[p.seq % HYDRA_MAX_RAW] = p;   // ring buffer, oldest overwritten
+  portEXIT_CRITICAL(&msg_mux);
+}
+
+void hydraRawJson(Print& out) {
+  uint32_t now = millis();
+  out.printf("{\"uptime_s\":%lu,\"packets\":[", (unsigned long)(now / 1000));
+  bool first = true;
+  for (int i = 0; i < HYDRA_MAX_RAW; i++) {
+    HydraRawPacket p;
+    portENTER_CRITICAL(&msg_mux);
+    p = raw_packets[i];
+    portEXIT_CRITICAL(&msg_mux);
+    if (p.seq == 0) continue;
+
+    if (!first) out.print(',');
+    first = false;
+    out.printf("{\"seq\":%lu,\"type\":%u,\"hops\":%u,\"snr\":%.2f,\"rssi\":%d,\"heard_s\":%lu,\"payload\":\"",
+               (unsigned long)p.seq, p.type, p.hops, p.snr4 / 4.0f, p.rssi, (unsigned long)((now - p.heard_millis) / 1000));
+    for (int j = 0; j < p.len; j++) out.printf("%02x", p.payload[j]);
+    out.print("\"}");
+  }
+  out.print("]}");
+}
+
 static void printJsonString(Print& out, const char* s) {
   out.print('"');
   for (; *s; s++) {
@@ -161,4 +213,6 @@ void hydraChannelsInit() { }
 int hydraSearchChannels(const uint8_t*, mesh::GroupChannel[], int) { return 0; }
 void hydraGroupMsg(const mesh::Packet*, uint8_t, const mesh::GroupChannel&, const uint8_t*, size_t) { }
 void hydraChannelsJson(Print& out) { out.print("{\"channels\":[],\"messages\":[]}"); }
+void hydraGroupRaw(const mesh::Packet*) { }
+void hydraRawJson(Print& out) { out.print("{\"packets\":[]}"); }
 #endif
