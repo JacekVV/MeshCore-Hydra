@@ -46,21 +46,31 @@ load();setInterval(load,30000);
 static const char CHANNELS_PAGE[] = R"HTML(<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Hydra MeshCore kanały</title>
 <style>body{font-family:sans-serif;margin:12px}table{border-collapse:collapse;font-size:14px}
-td,th{border:1px solid #bbb;padding:3px 6px;text-align:left;vertical-align:top}th{background:#eee}td.t{max-width:600px}</style>
-</head><body><h3>Wiadomości na kanałach</h3><p id="s"></p><table id="t"></table>
+td,th{border:1px solid #bbb;padding:3px 6px;text-align:left;vertical-align:top}th{background:#eee}td.t{max-width:600px}
+#tabs{margin:8px 0}#tabs a{display:inline-block;padding:5px 12px;margin-right:4px;border:1px solid #bbb;border-bottom:none;
+border-radius:6px 6px 0 0;text-decoration:none;color:#000;background:#eee}#tabs a.on{background:#fff;font-weight:bold}</style>
+</head><body><h3>Wiadomości na kanałach</h3><p id="s"></p><div id="tabs"></div><table id="t"></table>
 <p>Ostatnie wiadomości w pamięci repeatera (znikają po restarcie). Czas nadania z zegara nadawcy. SNR i RSSI dotyczą ostatniego skoku.
 <a href="/">Węzły</a></p>
 <script>
+let data=null;
 function ago(s){return s<60?s+' s':s<3600?Math.floor(s/60)+' min':s<86400?Math.floor(s/3600)+' h':Math.floor(s/86400)+' d'}
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
-function load(){fetch('/channels').then(r=>r.json()).then(j=>{
- j.messages.sort((a,b)=>b.seq-a.seq);
- let h='<tr><th>Odebrano</th><th>Nadano</th><th>Kanał</th><th>Wiadomość</th><th>Skoki</th><th>SNR</th><th>RSSI</th></tr>';
- for(const m of j.messages){h+='<tr><td>'+ago(m.heard_s)+' temu</td><td>'+new Date(m.sent_time*1000).toLocaleString('pl-PL')+'</td><td>'+esc(m.channel)+
-  '</td><td class="t">'+esc(m.text)+'</td><td>'+m.hops+'</td><td>'+m.snr+'</td><td>'+m.rssi+'</td></tr>'}
+function tab(){return decodeURIComponent(location.hash.slice(1))}
+function show(){if(!data)return;const cur=tab();
+ let t='<a href="#" class="'+(cur==''?'on':'')+'">Wszystkie ('+data.messages.length+')</a>';
+ for(const c of data.channels){const n=data.messages.filter(m=>m.channel==c).length;
+  t+='<a href="#'+encodeURIComponent(c)+'" class="'+(cur==c?'on':'')+'">'+esc(c)+' ('+n+')</a>'}
+ document.getElementById('tabs').innerHTML=t;
+ let h='<tr><th>Odebrano</th><th>Nadano</th>'+(cur==''?'<th>Kanał</th>':'')+'<th>Wiadomość</th><th>Skoki</th><th>SNR</th><th>RSSI</th></tr>';
+ for(const m of data.messages){if(cur!=''&&m.channel!=cur)continue;
+  h+='<tr><td>'+ago(m.heard_s)+' temu</td><td>'+new Date(m.sent_time*1000).toLocaleString('pl-PL')+'</td>'+(cur==''?'<td>'+esc(m.channel)+'</td>':'')+
+  '<td class="t">'+esc(m.text)+'</td><td>'+m.hops+'</td><td>'+m.snr+'</td><td>'+m.rssi+'</td></tr>'}
  document.getElementById('t').innerHTML=h;
- document.getElementById('s').textContent='Kanały: '+j.channels.join(', ')+'. Wiadomości: '+j.messages.length+', czas pracy: '+ago(j.uptime_s);
-})}
+ document.getElementById('s').textContent='Kanały: '+data.channels.join(', ')+'. Wiadomości: '+data.messages.length+', czas pracy: '+ago(data.uptime_s);
+}
+function load(){fetch('/channels').then(r=>r.json()).then(j=>{j.messages.sort((a,b)=>b.seq-a.seq);data=j;show()})}
+window.onhashchange=show;
 load();setInterval(load,15000);
 </script></body></html>)HTML";
 #endif
