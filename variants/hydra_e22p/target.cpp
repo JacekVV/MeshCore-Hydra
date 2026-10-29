@@ -4,7 +4,7 @@
 // Hydra: ESP32 + Ebyte E22P-868M30S. Same as generic-e22, except pin 14 powers the E22P PA and must stay HIGH
 // (it is not RXEN on the E22P), and the radio reset is wired to GPIO 23.
 
-ESP32Board board;
+HydraBoard board;
 
 static SPIClass spi;
 RADIO_CLASS radio = new Module(P_LORA_NSS, P_LORA_DIO_1, P_LORA_RESET, P_LORA_BUSY, spi);
