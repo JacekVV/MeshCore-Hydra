@@ -79,7 +79,18 @@ void HydraBoard::loop() {
 
 bool HydraBoard::startOTAUpdate(const char* id, char reply[]) {
   if (WiFi.status() != WL_CONNECTED) {
-    strcpy(reply, "Wi-Fi not connected");
+    // diagnostics: connection status and whether the SSID is visible (scan blocks for ~2 s)
+    int status = WiFi.status();
+    int found = WiFi.scanNetworks(), rssi = 0, channel = 0;
+    for (int i = 0; i < found; i++) {
+      if (WiFi.SSID(i) == WIFI_SSID) { rssi = WiFi.RSSI(i); channel = WiFi.channel(i); break; }
+    }
+    WiFi.scanDelete();
+    if (rssi != 0) {
+      sprintf(reply, "Wi-Fi not connected, status %d, SSID seen %d dBm ch %d", status, rssi, channel);
+    } else {
+      sprintf(reply, "Wi-Fi not connected, status %d, SSID not seen (%d networks)", status, found);
+    }
     return true;
   }
   sprintf(reply, "OTA: http://%s/update", WiFi.localIP().toString().c_str());
