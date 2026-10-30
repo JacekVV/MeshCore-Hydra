@@ -62,6 +62,9 @@ MultiSerialInterface interface_manager;
   #if defined(ESP32) || defined(RP2040_PLATFORM)
     #include <helpers/wifi/SerialWifiInterface.h>
     SerialWifiInterface wifi_interface;
+    #ifdef HYDRA_TCP_PORT2
+      SerialWifiInterface hydra_tcp2;   // Hydra: second TCP port for the RPi, so it does not kick the phone app off
+    #endif
   #else
     #error "SerialWifiInterface is not defined for this platform"
   #endif
@@ -252,6 +255,10 @@ void setup() {
 #endif
     wifi_interface.begin(TCP_PORT);
     interface_manager.addInterface(InterfaceType::WiFi, &wifi_interface);
+#ifdef HYDRA_TCP_PORT2
+    hydra_tcp2.begin(HYDRA_TCP_PORT2);
+    interface_manager.addInterface(InterfaceType::WiFi, &hydra_tcp2);
+#endif
   } else {
     WIFI_DEBUG_PRINTLN("wifi disabled");
   }
