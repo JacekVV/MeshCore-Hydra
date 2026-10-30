@@ -1,6 +1,9 @@
 #include <Arduino.h>   // needed for PlatformIO
 #include <Mesh.h>
 #include "MyMesh.h"
+#ifdef HYDRA_COMPANION_OTA
+  #include <HydraOta.h>   // Hydra: OTA over Wi-Fi
+#endif
 
 // Believe it or not, this std C function is busted on some platforms!
 static uint32_t _atoi(const char* sp) {
@@ -298,6 +301,9 @@ void loop() {
 #endif
   rtc_clock.tick();
   board.loop();
+#ifdef HYDRA_COMPANION_OTA
+  hydraOtaLoop();
+#endif
 #ifdef HAS_EXTERNAL_WATCHDOG
   external_watchdog.loop();
 #endif
