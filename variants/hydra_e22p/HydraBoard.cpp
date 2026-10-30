@@ -246,6 +246,11 @@ void HydraBoard::loop() {
       hydraNodesJson(*response);
       request->send(response);
     });
+    ota_server->on("/paths", HTTP_GET, [](AsyncWebServerRequest *request) {
+      AsyncResponseStream* response = request->beginResponseStream("application/json");
+      hydraPathsJson(*response);
+      request->send(response);
+    });
     ota_server->on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
       request->send(200, "text/html", NODES_PAGE);
     });

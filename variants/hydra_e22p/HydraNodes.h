@@ -12,3 +12,12 @@
 void hydraNodeHeard(const mesh::Packet* packet, const mesh::Identity& id, uint32_t timestamp,
                     const uint8_t* app_data, size_t app_data_len);
 void hydraNodesJson(Print& out);
+
+// Paths of received flood packets (duplicates too, each copy may come another way), the last HYDRA_MAX_PATHS,
+// served as JSON at /paths. The RPi turns them into a "who hears whom" map. Hook in MyMesh::onRecvPacket().
+#ifndef HYDRA_MAX_PATHS
+  #define HYDRA_MAX_PATHS 128
+#endif
+
+void hydraPathHeard(const mesh::Packet* packet, const uint8_t* self_pub_key, double self_lat, double self_lon);
+void hydraPathsJson(Print& out);

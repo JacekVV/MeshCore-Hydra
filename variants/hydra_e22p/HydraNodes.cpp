@@ -123,7 +123,83 @@ void hydraNodesJson(Print& out) {
   out.print("]}");
 }
 
+struct HydraPath {
+  uint32_t seq;              // 0 = empty slot
+  uint8_t type;
+  uint8_t path_len;          // as in the packet: hash size and hash count
+  uint8_t path[MAX_PATH_SIZE];
+  uint8_t origin[6];         // advert sender's public key prefix
+  uint8_t pkt_hash[4];       // the same packet heard several times has the same hash
+  int8_t snr4;
+  int16_t rssi;
+  uint32_t heard_millis;
+};
+
+static HydraPath paths[HYDRA_MAX_PATHS];
+static uint32_t next_path_seq = 1;
+static uint8_t self_key[6];
+static double self_lat, self_lon;
+
+void hydraPathHeard(const mesh::Packet* packet, const uint8_t* self_pub_key, double lat, double lon) {
+  if (!packet->isRouteFlood()) return;
+  HydraPath p;
+  memset(&p, 0, sizeof(p));
+  p.type = packet->getPayloadType();
+  p.path_len = packet->path_len;
+  memcpy(p.path, packet->path, packet->getPathByteLen());
+  if (p.type == PAYLOAD_TYPE_ADVERT && packet->payload_len >= sizeof(p.origin)) memcpy(p.origin, packet->payload, sizeof(p.origin));
+  uint8_t hash[MAX_HASH_SIZE];
+  packet->calculatePacketHash(hash);
+  memcpy(p.pkt_hash, hash, sizeof(p.pkt_hash));
+  p.snr4 = (int8_t)(packet->getSNR() * 4);
+  p.rssi = (int16_t)radio_driver.getLastRSSI();
+  p.heard_millis = millis();
+
+  portENTER_CRITICAL(&nodes_mux);
+  memcpy(self_key, self_pub_key, sizeof(self_key));
+  self_lat = lat;
+  self_lon = lon;
+  p.seq = next_path_seq++;
+  paths[p.seq % HYDRA_MAX_PATHS] = p;   // ring buffer, oldest overwritten
+  portEXIT_CRITICAL(&nodes_mux);
+}
+
+void hydraPathsJson(Print& out) {
+  uint32_t now = millis();
+  uint8_t key[6];
+  double lat, lon;
+  portENTER_CRITICAL(&nodes_mux);
+  memcpy(key, self_key, sizeof(key));
+  lat = self_lat;
+  lon = self_lon;
+  portEXIT_CRITICAL(&nodes_mux);
+  out.printf("{\"uptime_s\":%lu,\"self\":\"", (unsigned long)(now / 1000));
+  for (int j = 0; j < sizeof(key); j++) out.printf("%02x", key[j]);
+  out.printf("\",\"lat\":%.6f,\"lon\":%.6f,\"paths\":[", lat, lon);
+  bool first = true;
+  for (int i = 0; i < HYDRA_MAX_PATHS; i++) {
+    HydraPath p;
+    portENTER_CRITICAL(&nodes_mux);
+    p = paths[i];
+    portEXIT_CRITICAL(&nodes_mux);
+    if (p.seq == 0) continue;
+
+    if (!first) out.print(',');
+    first = false;
+    uint8_t size = (p.path_len >> 6) + 1, count = p.path_len & 63;
+    out.printf("{\"seq\":%lu,\"type\":%u,\"hash\":\"%02x%02x%02x%02x\",\"hash_size\":%u,\"path\":\"",
+               (unsigned long)p.seq, p.type, p.pkt_hash[0], p.pkt_hash[1], p.pkt_hash[2], p.pkt_hash[3], size);
+    for (int j = 0; j < size * count && j < MAX_PATH_SIZE; j++) out.printf("%02x", p.path[j]);
+    out.print("\",\"origin\":\"");
+    if (p.type == PAYLOAD_TYPE_ADVERT) for (int j = 0; j < sizeof(p.origin); j++) out.printf("%02x", p.origin[j]);
+    out.printf("\",\"snr\":%.2f,\"rssi\":%d,\"heard_s\":%lu}", p.snr4 / 4.0f, p.rssi, (unsigned long)((now - p.heard_millis) / 1000));
+  }
+  out.print("]}");
+}
+
 #else
 void hydraNodeHeard(const mesh::Packet*, const mesh::Identity&, uint32_t, const uint8_t*, size_t) { }
 void hydraNodesJson(Print& out) { out.print("{\"nodes\":[]}"); }
+void hydraPathHeard(const mesh::Packet*, const uint8_t*, double, double) { }
+void hydraPathsJson(Print& out) { out.print("{\"paths\":[]}"); }
 #endif
