@@ -128,26 +128,31 @@ struct HydraPath {
   uint8_t type;
   uint8_t path_len;          // as in the packet: hash size and hash count
   uint8_t path[MAX_PATH_SIZE];
-  uint8_t origin[6];         // advert sender's public key prefix
+  uint8_t route;             // ROUTE_TYPE_*
+  uint8_t payload_len;
+  uint8_t payload[MAX_PACKET_PAYLOAD];   // the RPi reads what is readable without keys (adverts, hashes, channels)
   uint8_t pkt_hash[4];       // the same packet heard several times has the same hash
   int8_t snr4;
   int16_t rssi;
   uint32_t heard_millis;
 };
 
-static HydraPath paths[HYDRA_MAX_PATHS];
+static HydraPath* paths = NULL;   // on the heap: too big for static DRAM
 static uint32_t next_path_seq = 1;
 static uint8_t self_key[6];
 static double self_lat, self_lon;
 
 void hydraPathHeard(const mesh::Packet* packet, const uint8_t* self_pub_key, double lat, double lon) {
-  if (!packet->isRouteFlood()) return;
+  if (paths == NULL) paths = (HydraPath*)calloc(HYDRA_MAX_PATHS, sizeof(HydraPath));   // main loop only
+  if (paths == NULL) return;
   HydraPath p;
   memset(&p, 0, sizeof(p));
   p.type = packet->getPayloadType();
   p.path_len = packet->path_len;
-  memcpy(p.path, packet->path, packet->getPathByteLen());
-  if (p.type == PAYLOAD_TYPE_ADVERT && packet->payload_len >= sizeof(p.origin)) memcpy(p.origin, packet->payload, sizeof(p.origin));
+  memcpy(p.path, packet->path, packet->getPathByteLen() > MAX_PATH_SIZE ? MAX_PATH_SIZE : packet->getPathByteLen());
+  p.route = packet->getRouteType();
+  p.payload_len = packet->payload_len > sizeof(p.payload) ? sizeof(p.payload) : packet->payload_len;
+  memcpy(p.payload, packet->payload, p.payload_len);
   uint8_t hash[MAX_HASH_SIZE];
   packet->calculatePacketHash(hash);
   memcpy(p.pkt_hash, hash, sizeof(p.pkt_hash));
@@ -177,7 +182,7 @@ void hydraPathsJson(Print& out) {
   for (int j = 0; j < sizeof(key); j++) out.printf("%02x", key[j]);
   out.printf("\",\"lat\":%.6f,\"lon\":%.6f,\"paths\":[", lat, lon);
   bool first = true;
-  for (int i = 0; i < HYDRA_MAX_PATHS; i++) {
+  for (int i = 0; paths != NULL && i < HYDRA_MAX_PATHS; i++) {
     HydraPath p;
     portENTER_CRITICAL(&nodes_mux);
     p = paths[i];
@@ -191,7 +196,9 @@ void hydraPathsJson(Print& out) {
                (unsigned long)p.seq, p.type, p.pkt_hash[0], p.pkt_hash[1], p.pkt_hash[2], p.pkt_hash[3], size);
     for (int j = 0; j < size * count && j < MAX_PATH_SIZE; j++) out.printf("%02x", p.path[j]);
     out.print("\",\"origin\":\"");
-    if (p.type == PAYLOAD_TYPE_ADVERT) for (int j = 0; j < sizeof(p.origin); j++) out.printf("%02x", p.origin[j]);
+    if (p.type == PAYLOAD_TYPE_ADVERT && p.payload_len >= 6) for (int j = 0; j < 6; j++) out.printf("%02x", p.payload[j]);
+    out.printf("\",\"route\":%u,\"payload\":\"", p.route);
+    for (int j = 0; j < p.payload_len; j++) out.printf("%02x", p.payload[j]);
     out.printf("\",\"snr\":%.2f,\"rssi\":%d,\"heard_s\":%lu}", p.snr4 / 4.0f, p.rssi, (unsigned long)((now - p.heard_millis) / 1000));
   }
   out.print("]}");
