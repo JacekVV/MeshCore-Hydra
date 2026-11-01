@@ -32,3 +32,8 @@ Changes only in the `variants/hydra_e22p/` variant (Hydra = ESP32 + Ebyte E22P-8
 - v1.18.0-hydra-16 - node name cut at complete UTF-8 characters, so `/nodes` always returns valid JSON.
 
 Last flashed build: v1.18.0-hydra-16. Commits on the `hydra` branch: `fafe81aa` (Wi-Fi as in Meshtastic, RSSI), `9c75faf3` (UTF-8 in node name).
+
+## Credits
+
+- MeshCore firmware (original project): [meshcore-dev/MeshCore](https://github.com/meshcore-dev/MeshCore), MIT license (see `license.txt`).
+- Board designs: [NanoVHF/Meshtastic-DIY](https://github.com/NanoVHF/Meshtastic-DIY).
