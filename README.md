@@ -3,6 +3,15 @@
 
 ## Hardware
 
+Target board: `hydraE22P` (`variants/esp32/diy/hydra_e22p`)
+
+- MCU: ESP32-D0WD-V3 rev 3.1 (ESP32-WROOM-32D DevKit, `esp32doit-devkit-v1`)
+- Flash: 4 MB
+- SRAM: 320 KB (327 680 B)
+- PSRAM: none (`MAX_NUM_NODES=80` keeps RAM headroom)
+- LoRa: Ebyte E22P-868M30S (EU_868, 30 dBm PA, `-D USE_EBYTE_E22P`)
+- Build usage (current build): RAM 30.4 %, flash 92.5 % of the 2 424 832 B app partition
+
 # Hydra E22P: opis zmian w płytce
 
 Zmiany tylko w wariancie `variants/hydra_e22p/` (Hydra = ESP32 + Ebyte E22P-868M30S). Wersje firmware: `v1.18.0-hydra-N`.
