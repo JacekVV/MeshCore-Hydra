@@ -1,6 +1,5 @@
 
 <h1>MeshCore Firmware+ HYDRA optimization esp32+E22P</h1>
-[FW+ fork description](https://github.com/musznik/firmware)
 
 ## Hardware
 
