@@ -26,6 +26,16 @@ struct HydraNode {
 static HydraNode nodes[HYDRA_MAX_NODES];
 static portMUX_TYPE nodes_mux = portMUX_INITIALIZER_UNLOCKED;   // web server runs in another task
 
+// strncpy cuts by bytes, so a multi-byte UTF-8 character can end up half-written; /nodes JSON then is not valid UTF-8
+static void trimIncompleteUtf8(char* s) {
+  size_t len = strlen(s), start = len;
+  while (start > 0 && len - start < 3 && ((uint8_t)s[start - 1] & 0xC0) == 0x80) start--;   // continuation bytes at the end
+  if (start == 0) return;
+  uint8_t lead = (uint8_t)s[start - 1];
+  size_t need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
+  if (len - (start - 1) < need) s[start - 1] = 0;
+}
+
 void hydraNodeHeard(const mesh::Packet* packet, const mesh::Identity& id, uint32_t timestamp,
                     const uint8_t* app_data, size_t app_data_len) {
   AdvertDataParser parser(app_data, app_data_len);
@@ -34,7 +44,10 @@ void hydraNodeHeard(const mesh::Packet* packet, const mesh::Identity& id, uint32
   HydraNode n;
   memset(&n, 0, sizeof(n));
   memcpy(n.pub_key, id.pub_key, PUB_KEY_SIZE);
-  if (parser.hasName()) strncpy(n.name, parser.getName(), sizeof(n.name) - 1);
+  if (parser.hasName()) {
+    strncpy(n.name, parser.getName(), sizeof(n.name) - 1);
+    trimIncompleteUtf8(n.name);
+  }
   n.type = parser.getType();
   n.hops = packet->getPathHashCount();
   if (n.hops > 0) {
