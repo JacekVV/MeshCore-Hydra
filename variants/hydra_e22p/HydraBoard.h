@@ -7,6 +7,7 @@
 //   /update  ElegantOTA (auth)          /version  running version
 //   /cli     repeater CLI command (auth), e.g. /cli?cmd=stats-core, run in the main loop
 //   /stats   uptime, reset reason, heap, Wi-Fi and radio counters (JSON)
+//   /rssi    Wi-Fi signal history, a sample a minute for 8 h (JSON), ?since=<uptime_s> for newer samples only
 //   /log     packet log file (after "log start")
 class HydraBoard : public ESP32Board {
 public:

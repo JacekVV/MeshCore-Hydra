@@ -3,6 +3,7 @@
 #ifdef HYDRA_WIFI_OTA
 
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncElegantOTA.h>
@@ -105,6 +106,29 @@ static const char* const wifi_pwds[] = { WIFI_PWD,
 };
 static int wifi_net = 0;
 
+// Wi-Fi signal history for /rssi: one sample a minute in a ring buffer (480 samples = 8 h), kept in RAM
+#define RSSI_SAMPLE_MILLIS 60000
+#define RSSI_SAMPLES 480
+struct RssiSample {
+  uint32_t uptime_s;
+  int8_t rssi;          // dBm, 0 when not connected
+  uint8_t net;          // index into wifi_ssids
+  uint16_t reconnects;
+};
+static RssiSample rssi_samples[RSSI_SAMPLES];
+static uint32_t rssi_total = 0;   // samples taken since boot
+static unsigned long rssi_last_sample = 0;
+
+static void sampleRssi() {
+  RssiSample& s = rssi_samples[rssi_total % RSSI_SAMPLES];
+  s.uptime_s = millis() / 1000;
+  s.rssi = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
+  s.net = wifi_net;
+  s.reconnects = wifi_reconnects;
+  rssi_total++;
+  rssi_last_sample = millis();
+}
+
 // CLI over HTTP: the web server task hands the command to the main loop and waits for the reply
 #define CLI_WAIT_MILLIS 3000
 static HydraBoard::CliHandler cli_handler = NULL;
@@ -165,6 +189,24 @@ static void handleStats(AsyncWebServerRequest *request) {
   request->send(r);
 }
 
+// /rssi?since=<uptime_s>: samples newer than that uptime (all if no parameter), oldest first
+// JSON: {"interval_s":60,"total":N,"samples":[[uptime_s,rssi_dbm,net,reconnects],...]}, rssi 0 = not connected
+static void handleRssi(AsyncWebServerRequest *request) {
+  uint32_t since = request->hasParam("since") ? strtoul(request->getParam("since")->value().c_str(), NULL, 10) : 0;
+  uint32_t first = rssi_total > RSSI_SAMPLES ? rssi_total - RSSI_SAMPLES : 0;
+  AsyncResponseStream* r = request->beginResponseStream("application/json");
+  r->printf("{\"interval_s\":%d,\"total\":%lu,\"samples\":[", RSSI_SAMPLE_MILLIS / 1000, (unsigned long)rssi_total);
+  bool comma = false;
+  for (uint32_t i = first; i < rssi_total; i++) {
+    const RssiSample& s = rssi_samples[i % RSSI_SAMPLES];
+    if (s.uptime_s <= since) continue;
+    r->printf("%s[%lu,%d,%u,%u]", comma ? "," : "", (unsigned long)s.uptime_s, s.rssi, s.net, s.reconnects);
+    comma = true;
+  }
+  r->print("]}");
+  request->send(r);
+}
+
 void HydraBoard::setCliHandler(CliHandler handler) {
   cli_handler = handler;
 }
@@ -181,7 +223,14 @@ void HydraBoard::onBootComplete() {
 
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(hostname);
-  WiFi.setAutoReconnect(true);
+  // as in Meshtastic (WiFiAPClient.cpp): reconnects are handled only by the watchdog in loop(), and the
+  // radio power saving is off (with the default modem sleep the board associated but got no DHCP answer)
+  WiFi.setAutoReconnect(false);
+  WiFi.setSleep(false);
+  esp_wifi_set_ps(WIFI_PS_NONE);
+  WiFi.onEvent([](WiFiEvent_t event, WiFiEventInfo_t info) {
+    Serial.printf("WiFi lost connection. Reason: %d\n", info.wifi_sta_disconnected.reason);
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   WiFi.begin(wifi_ssids[wifi_net], wifi_pwds[wifi_net]);
 }
 
@@ -200,11 +249,13 @@ void HydraBoard::loop() {
     wifi_lost_at = millis();
   } else if (millis() - wifi_lost_at > WIFI_RETRY_MILLIS) {
     wifi_net = (wifi_net + 1) % (sizeof(wifi_ssids) / sizeof(wifi_ssids[0]));
-    WiFi.disconnect();
+    WiFi.disconnect(false, true);   // clear the old credentials first, as Meshtastic does
     WiFi.begin(wifi_ssids[wifi_net], wifi_pwds[wifi_net]);
     wifi_reconnects++;
     wifi_lost_at = millis();
   }
+
+  if (rssi_total == 0 || millis() - rssi_last_sample >= RSSI_SAMPLE_MILLIS) sampleRssi();
 
   // system clock from NTP (the ESP32 clock restarts from a fixed date after each reset, and MeshCore
   // nodes ignore adverts older than the last one they saw); ESP32RTCClock reads the system clock
@@ -236,6 +287,7 @@ void HydraBoard::loop() {
 #endif
     ota_server->on("/cli", HTTP_ANY, handleCli);
     ota_server->on("/stats", HTTP_GET, handleStats);
+    ota_server->on("/rssi", HTTP_GET, handleRssi);
     ota_server->on("/log", HTTP_GET, [](AsyncWebServerRequest *request) {
       if (SPIFFS.exists("/packet_log")) request->send(SPIFFS, "/packet_log", "text/plain");
       else request->send(200, "text/plain", "(no packet log, use: log start)");
