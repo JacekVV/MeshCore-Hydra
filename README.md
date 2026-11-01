@@ -1,3 +1,9 @@
+
+<h1>MeshCore Firmware+ HYDRA optimization esp32+E22P</h1>
+[FW+ fork description](https://github.com/musznik/firmware)
+
+## Hardware
+
 # Hydra E22P: opis zmian w płytce
 
 Zmiany tylko w wariancie `variants/hydra_e22p/` (Hydra = ESP32 + Ebyte E22P-868M30S). Wersje firmware: `v1.18.0-hydra-N`.
