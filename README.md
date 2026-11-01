@@ -20,7 +20,7 @@ Changes only in the `variants/hydra_e22p/` variant (Hydra = ESP32 + Ebyte E22P-8
 - v1.18.0-hydra-2 - TX power 20 dBm (as in Meshtastic) and Wi-Fi diagnostics in `start ota`.
 - v1.18.0-hydra-3 - repeater connects to the home Wi-Fi, OTA via ElegantOTA with a password, `/version`. First OTA test over Wi-Fi.
 - v1.18.0-hydra-4 - monitoring over Wi-Fi: `/cli`, `/stats`, `/log`, Wi-Fi watchdog. Node list from adverts at `/` and `/nodes`.
-- v1.18.0-hydra-5 - view of the Public channels (`/kanal`, `/channels`), clock from NTP.
+- v1.18.0-hydra-5 - view of the Public and ` channels (`/kanal`, `/channels`), clock from NTP.
 - v1.18.0-hydra-6 - channel tabs on `/kanal`.
 - v1.18.0-hydra-7 - list of 64 popular `#` channels and statistics per channel ID.
 - v1.18.0-hydra-8 - backup Wi-Fi network (`WIFI_SSID2`), switching after 60 s without a connection.
