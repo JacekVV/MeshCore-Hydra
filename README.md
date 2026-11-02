@@ -24,7 +24,7 @@ Changes only in the `variants/hydra_e22p/` variant (Hydra = ESP32 + Ebyte E22P-8
 - v1.18.0-hydra-6 - channel tabs on `/kanal`.
 - v1.18.0-hydra-7 - list of 64 popular `#` channels and statistics per channel ID.
 - v1.18.0-hydra-8 - backup Wi-Fi network (`WIFI_SSID2`), switching after 60 s without a connection.
-- v1.18.0-hydra-9 - main network: access point, backup network name and AP password from env.
+- v1.18.0-hydra-9 - main network Meshtastic (RPi AP), backup VVV, AP password from env.
 - v1.18.0-hydra-10 to v1.18.0-hydra-12 - packet buffers `/grp` and `/paths`, backup network disabled. The journal does not record which build number contains which change.
 - v1.18.0-hydra-13 - backup Wi-Fi only from the variables `HYDRA_WIFI_SSID2` / `HYDRA_WIFI_PSK2` in `kompiluj.sh`; without them there is no backup network.
 - v1.18.0-hydra-14 - Wi-Fi as in Meshtastic: no power saving, no auto-reconnect, network data cleared before `begin`, log of the disconnect reason.
