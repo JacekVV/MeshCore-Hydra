@@ -30,8 +30,13 @@ Changes only in the `variants/hydra_e22p/` variant (Hydra = ESP32 + Ebyte E22P-8
 - v1.18.0-hydra-14 - Wi-Fi as in Meshtastic: no power saving, no auto-reconnect, network data cleared before `begin`, log of the disconnect reason.
 - v1.18.0-hydra-15 - Wi-Fi RSSI history in RAM (`/rssi`, one sample every 60 s for 8 h).
 - v1.18.0-hydra-16 - node name cut at complete UTF-8 characters, so `/nodes` always returns valid JSON.
+- v1.18.0-hydra-20261102-1709 - UDP multicast: repeater sends every packet from radio and its own packets to 239.77.67.1:5600.
+- v1.18.0-hydra-20261102-1721 - `hydra send <key> <text>` CLI command for group messages.
+- v1.18.0-hydra-20261102-1832 - UDP receive (`HYDRA_UDP_RX`): frames from other boards on the LAN go into the router, without retransmission over LoRa.
 
-Last flashed build: v1.18.0-hydra-16. Commits on the `hydra` branch: `fafe81aa` (Wi-Fi as in Meshtastic, RSSI), `9c75faf3` (UTF-8 in node name).
+Last flashed build: v1.18.0-hydra-20261102-1832. Commit on the `hydra-e22p` branch: 77c7ba21 (UDP link, hydra send, Wi-Fi and monitoring).
+
+
 
 ## Credits
 
