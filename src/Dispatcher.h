@@ -198,6 +198,11 @@ public:
 
   bool tryParsePacket(Packet* pkt, const uint8_t* raw, int len);
 
+#ifdef HYDRA_UDP_RX
+  // Hydra: feed a packet that arrived by another transport (UDP) into the normal receive path, as if heard on the radio
+  bool injectRawPacket(const uint8_t* raw, int len);
+#endif
+
 private:
   void checkRecv();
   void checkSend();

@@ -2,6 +2,9 @@
 #include <Mesh.h>
 
 #include "MyMesh.h"
+#ifdef HYDRA_UDP
+  #include <HydraUdp.h>
+#endif
 
 #ifdef DISPLAY_CLASS
   #include "UITask.h"
@@ -105,6 +108,10 @@ void setup() {
   sensors.begin();
 
   the_mesh.begin(fs);
+#ifdef HYDRA_WIFI_OTA
+  // Hydra: repeater CLI over Wi-Fi (http://<ip>/cli?cmd=...), run from board.loop() in this task
+  board.setCliHandler([](char* cmd, char* reply) { the_mesh.handleCommand(0, cmd, reply); });
+#endif
 
 #ifdef DISPLAY_CLASS
   ui_task.begin(the_mesh.getNodePrefs(), FIRMWARE_BUILD_DATE, FIRMWARE_VERSION);
@@ -166,6 +173,9 @@ void loop() {
   }
 
   board.loop();   // let the board feed its watchdog, run periodic housekeeping
+#ifdef HYDRA_UDP
+  hydraUdpLoop(the_mesh);   // Hydra: packets from the other Hydras on the LAN, in this task (no second task)
+#endif
 
 #ifdef ETHERNET_ENABLED
   ethernet_loop_maintain();

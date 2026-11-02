@@ -1,6 +1,13 @@
 #include "MyMesh.h"
 #include <algorithm>
 
+#ifdef HYDRA_NODE_LIST
+  #include <HydraNodes.h>   // Hydra: node list from adverts
+#endif
+#ifdef HYDRA_UDP
+  #include <HydraUdp.h>     // Hydra: packets between Hydras on the LAN
+#endif
+
 /* ------------------------------ Config -------------------------------- */
 
 #ifndef LORA_FREQ
@@ -474,6 +481,9 @@ void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
   mesh::Utils::printHex(Serial, raw, len);
   Serial.println();
 #endif
+#ifdef HYDRA_UDP
+  hydraUdpSendRaw(raw, len);   // radio only: packets from UDP do not come through here, so they are not sent back
+#endif
 }
 
 void MyMesh::logRx(mesh::Packet *pkt, int len, float score) {
@@ -507,6 +517,9 @@ void MyMesh::logTx(mesh::Packet *pkt, int len) {
   if (_prefs.bridge_pkt_src == 0) {
     bridge.sendPacket(pkt);
   }
+#endif
+#ifdef HYDRA_UDP
+  hydraUdpSendPacket(pkt);
 #endif
 
   if (_logging) {
@@ -565,6 +578,19 @@ mesh::DispatcherAction MyMesh::onRecvPacket(mesh::Packet* pkt) {
   } else {
     recv_pkt_region = NULL;
   }
+#ifdef HYDRA_CHANNELS
+  uint8_t type = pkt->getPayloadType();
+  if ((type == PAYLOAD_TYPE_GRP_TXT || type == PAYLOAD_TYPE_GRP_DATA) && !getTables()->wasSeen(pkt)) hydraGroupRaw(pkt);
+#endif
+#ifdef HYDRA_NODE_LIST
+  hydraPathHeard(pkt, self_id.pub_key, _prefs.node_lat, _prefs.node_lon);
+#endif
+#ifdef HYDRA_UDP_RX
+  if (hydraUdpInjecting) {   // Hydra: a packet from UDP is handled here but never repeated over LoRa
+    mesh::DispatcherAction action = Mesh::onRecvPacket(pkt);
+    return action >= ACTION_RETRANSMIT(0) ? ACTION_RELEASE : action;
+  }
+#endif
   return Mesh::onRecvPacket(pkt);
 }
 
@@ -650,6 +676,9 @@ static bool isShare(const mesh::Packet *packet) {
 void MyMesh::onAdvertRecv(mesh::Packet *packet, const mesh::Identity &id, uint32_t timestamp,
                           const uint8_t *app_data, size_t app_data_len) {
   mesh::Mesh::onAdvertRecv(packet, id, timestamp, app_data, app_data_len); // chain to super impl
+#ifdef HYDRA_NODE_LIST
+  hydraNodeHeard(packet, id, timestamp, app_data, app_data_len);
+#endif
 
   // if this a zero hop advert (and not via 'Share'), add it to neighbours
   if (packet->getPathHashCount() == 0 && !isShare(packet)) {
@@ -1281,10 +1310,60 @@ void MyMesh::handleCommand(uint32_t sender_timestamp, char *command, char *reply
       sendNodeDiscoverReq();
       strcpy(reply, "OK - Discover sent");
     }
+#ifdef HYDRA_CHANNELS
+  } else if (memcmp(command, "hydra send ", 11) == 0) {
+    hydraSend(command + 11, reply);
+#endif
   } else{
     _cli.handleCommand(sender_timestamp, command, reply);  // common CLI commands
   }
 }
+
+#ifdef HYDRA_CHANNELS
+// Hydra: "hydra send <klucz hex, 32 lub 64 znaki> <tekst>" wysyła tekst na kanał grupowy tak jak BaseChatMesh::sendGroupMessage()
+// (header: time 4 B, text type 0; body "name: text"). The key is supplied by the RPi from its own channel list.
+#define HYDRA_SEND_MAX_TEXT 150   // jak MAX_TEXT_LEN w BaseChatMesh.h, z zapasem na nagłówek i MAC
+
+void MyMesh::hydraSend(const char* args, char* reply) {
+  const char* sp = strchr(args, ' ');
+  size_t hex_len = sp ? sp - args : 0;
+  if (!sp || (hex_len != 32 && hex_len != 64) || sp[1] == 0) {
+    strcpy(reply, "Err - hydra send <klucz hex 32|64 znaki> <tekst>");
+    return;
+  }
+  char key_hex[65];
+  memcpy(key_hex, args, hex_len);
+  key_hex[hex_len] = 0;
+  int key_size = hex_len / 2;
+
+  mesh::GroupChannel ch;
+  memset(&ch, 0, sizeof(ch));
+  if (!mesh::Utils::fromHex(ch.secret, key_size, key_hex)) {
+    strcpy(reply, "Err - zły klucz");
+    return;
+  }
+  mesh::Utils::sha256(ch.hash, sizeof(ch.hash), ch.secret, key_size);   // same as addChannel() in HydraChannels.cpp
+
+  uint8_t temp[5 + HYDRA_SEND_MAX_TEXT + 1];
+  uint32_t timestamp = getRTCClock()->getCurrentTime();
+  memcpy(temp, &timestamp, 4);
+  temp[4] = 0;   // TXT_TYPE_PLAIN
+  int n = snprintf((char*)&temp[5], sizeof(temp) - 5, "%s: %s", _prefs.node_name, sp + 1);
+  if (n > HYDRA_SEND_MAX_TEXT) {
+    sprintf(reply, "Err - tekst za długi (max %d znaków z nazwą)", HYDRA_SEND_MAX_TEXT);
+    return;
+  }
+
+  mesh::Packet* pkt = createGroupDatagram(PAYLOAD_TYPE_GRP_TXT, ch, temp, 5 + n);
+  if (!pkt) {
+    strcpy(reply, "Err - pakiet nie powstał");
+    return;
+  }
+  uint32_t delay_millis = 0;
+  sendFlood(pkt, delay_millis, _prefs.path_hash_mode + 1);
+  strcpy(reply, "OK - sent");
+}
+#endif
 
 void MyMesh::loop() {
 #ifdef WITH_BRIDGE

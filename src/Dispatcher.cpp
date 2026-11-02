@@ -258,6 +258,22 @@ void Dispatcher::checkRecv() {
   }
 }
 
+#ifdef HYDRA_UDP_RX
+// Hydra: same as checkRecv() for a packet that did not come from the radio (no SNR, no air time, no logRxRaw)
+bool Dispatcher::injectRawPacket(const uint8_t* raw, int len) {
+  Packet* pkt = _mgr->allocNew();
+  if (pkt == NULL) return false;
+  if (!tryParsePacket(pkt, raw, len)) {
+    _mgr->free(pkt);
+    return false;
+  }
+  pkt->_snr = 0;
+  if (pkt->isRouteFlood()) n_recv_flood++; else n_recv_direct++;
+  processRecvPacket(pkt);
+  return true;
+}
+#endif
+
 void Dispatcher::processRecvPacket(Packet* pkt) {
   DispatcherAction action = onRecvPacket(pkt);
   if (action == ACTION_RELEASE) {
